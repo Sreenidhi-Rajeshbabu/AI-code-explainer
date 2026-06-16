@@ -1,6 +1,6 @@
 """
 AI Code Explainer — FastAPI Backend
-Day 3: Full /api/explain endpoint
+Day 6: Production-ready CORS (works locally AND on Render)
 """
 
 import os
@@ -15,17 +15,33 @@ load_dotenv()
 
 app = FastAPI(title="AI Code Explainer", version="1.0.0")
 
-# CORS — allows your React frontend to talk to this backend
+# ============================================================
+# CORS — allows local dev AND your deployed Vercel frontend
+# ============================================================
+
+# Add your Vercel URL here after you deploy the frontend (Step 2 below)
+ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://localhost:3000",
+    # "https://your-app-name.vercel.app",  <- uncomment and fill this in after frontend deploy
+]
+
+# Also allow an origin from an env var, so you can update it without code changes
+extra_origin = os.getenv("FRONTEND_URL")
+if extra_origin:
+    ALLOWED_ORIGINS.append(extra_origin)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://localhost:3000"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # ============================================================
-# REQUEST MODEL — defines what the frontend must send
+# REQUEST MODEL
 # ============================================================
 
 class CodeRequest(BaseModel):
@@ -93,15 +109,9 @@ def call_gemini(code: str, language: str) -> dict:
 
     payload = {
         "contents": [
-            {
-                "parts": [
-                    {"text": build_prompt(code, language)}
-                ]
-            }
+            {"parts": [{"text": build_prompt(code, language)}]}
         ],
-        "generationConfig": {
-            "temperature": 0.2
-        }
+        "generationConfig": {"temperature": 0.2}
     }
 
     try:
@@ -120,7 +130,6 @@ def call_gemini(code: str, language: str) -> dict:
 
     raw_text = response.json()["candidates"][0]["content"]["parts"][0]["text"]
 
-    # Clean up markdown backticks if Gemini adds them
     raw_text = raw_text.strip()
     if raw_text.startswith("```"):
         raw_text = raw_text.split("```")[1]
@@ -151,18 +160,12 @@ def health_check():
 
 @app.post("/api/explain")
 def explain_code(request: CodeRequest):
-    # Input validation
     if not request.code or not request.code.strip():
         raise HTTPException(status_code=400, detail="Code cannot be empty.")
-
     if len(request.code) > 5000:
         raise HTTPException(status_code=400, detail="Code too long. Please keep it under 5000 characters.")
-
     if not request.language or not request.language.strip():
         raise HTTPException(status_code=400, detail="Language cannot be empty.")
 
     result = call_gemini(request.code.strip(), request.language.strip())
     return result
-
-
-# Run with: uvicorn main:app --reload

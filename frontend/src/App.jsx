@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import "./App.css";
-
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 const LANGUAGES = ["Python", "JavaScript", "TypeScript", "Java", "C++", "C", "Go", "Rust", "PHP", "Ruby"];
 const LANG_MAP = { "Python": "python", "JavaScript": "javascript", "TypeScript": "typescript", "Java": "java", "C++": "cpp", "C": "c", "Go": "go", "Rust": "rust", "PHP": "php", "Ruby": "ruby" };
 
@@ -63,7 +63,7 @@ export default function App() {
     if (!code.trim()) { setError("Please paste some code first."); return; }
     setError(""); setResult(null); setLoading(true);
     try {
-      const res = await fetch("http://localhost:8000/api/explain", {
+      const res = await fetch(`${API_URL}/api/explain`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code, language }),
