@@ -1,7 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import "./App.css";
 
 const LANGUAGES = ["Python", "JavaScript", "TypeScript", "Java", "C++", "C", "Go", "Rust", "PHP", "Ruby"];
+const LANG_MAP = { "Python": "python", "JavaScript": "javascript", "TypeScript": "typescript", "Java": "java", "C++": "cpp", "C": "c", "Go": "go", "Rust": "rust", "PHP": "php", "Ruby": "ruby" };
 
 const TABS = [
   { key: "line_by_line", label: "Line by Line", icon: "📝" },
@@ -11,6 +14,8 @@ const TABS = [
   { key: "interview_explanation", label: "Interview", icon: "🎤" },
 ];
 
+const MAX_HISTORY = 3;
+
 export default function App() {
   const [code, setCode] = useState("");
   const [language, setLanguage] = useState("Python");
@@ -18,6 +23,41 @@ export default function App() {
   const [activeTab, setActiveTab] = useState("line_by_line");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [history, setHistory] = useState([]);
+
+  // Load history from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem("codeExplainerHistory");
+    if (saved) setHistory(JSON.parse(saved));
+  }, []);
+
+  function saveToHistory(code, language, result) {
+    const entry = {
+      id: Date.now(),
+      code,
+      language,
+      result,
+      preview: code.slice(0, 60).replace(/\n/g, " ") + (code.length > 60 ? "..." : ""),
+    };
+    const updated = [entry, ...history].slice(0, MAX_HISTORY);
+    setHistory(updated);
+    localStorage.setItem("codeExplainerHistory", JSON.stringify(updated));
+  }
+
+  function loadFromHistory(entry) {
+    setCode(entry.code);
+    setLanguage(entry.language);
+    setResult(entry.result);
+    setActiveTab("line_by_line");
+    setError("");
+  }
+
+  function handleCopy(text) {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
 
   async function handleExplain() {
     if (!code.trim()) { setError("Please paste some code first."); return; }
@@ -32,6 +72,7 @@ export default function App() {
       if (!res.ok) { setError(data.detail || "Something went wrong."); return; }
       setResult(data);
       setActiveTab("line_by_line");
+      saveToHistory(code, language, data);
     } catch {
       setError("Could not reach the backend. Make sure it is running on port 8000.");
     } finally {
@@ -41,6 +82,9 @@ export default function App() {
 
   return (
     <div className="app">
+      {/* Toast */}
+      {copied && <div className="toast">✓ Copied to clipboard</div>}
+
       <header className="header">
         <div className="header-inner">
           <div className="logo"><span className="logo-bracket">&lt;</span>CodeExplain<span className="logo-bracket">/&gt;</span></div>
@@ -49,6 +93,21 @@ export default function App() {
       </header>
 
       <main className="main">
+
+        {/* History Bar */}
+        {history.length > 0 && (
+          <div className="history-bar">
+            <span className="history-label">Recent</span>
+            {history.map((entry) => (
+              <button key={entry.id} className="history-pill" onClick={() => loadFromHistory(entry)}>
+                <span className="history-lang">{entry.language}</span>
+                <span className="history-preview">{entry.preview}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Input Panel */}
         <section className="input-panel">
           <div className="input-toolbar">
             <label className="toolbar-label">Language</label>
@@ -75,6 +134,7 @@ export default function App() {
           </button>
         </section>
 
+        {/* Results */}
         {result && (
           <section className="results-panel">
             <div className="tabs">
@@ -131,9 +191,17 @@ export default function App() {
                 <div className="section">
                   <div className="code-block-header">
                     <span>Optimized Code</span>
-                    <button className="copy-btn" onClick={() => navigator.clipboard.writeText(result.optimized_version.code)}>Copy</button>
+                    <button className="copy-btn" onClick={() => handleCopy(result.optimized_version.code)}>
+                      {copied ? "✓ Copied!" : "Copy"}
+                    </button>
                   </div>
-                  <pre className="code-block">{result.optimized_version.code}</pre>
+                  <SyntaxHighlighter
+                    language={LANG_MAP[language] || "python"}
+                    style={vscDarkPlus}
+                    customStyle={{ borderRadius: "8px", fontSize: "13px", margin: 0 }}
+                  >
+                    {result.optimized_version.code}
+                  </SyntaxHighlighter>
                   <div className="changes-box">
                     <p className="changes-label">What changed</p>
                     <p className="changes-text">{result.optimized_version.changes}</p>
